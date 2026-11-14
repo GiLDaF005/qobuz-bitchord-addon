@@ -16,6 +16,14 @@ const ROWS = 50;
 const MAX_TRACKS = 20;
 const BATCH_SIZE = 10;
 
+// BitChord authentication verifier
+const bitchordAuthPromise = import("../bitchord-addon-auth.mjs").then(
+  ({ createBitChordAuth }) =>
+    createBitChordAuth({
+      hosts: ["qobuz-bitchord-addon.vercel.app"]
+    })
+);
+
 function json(res, status, data) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json");
@@ -288,6 +296,18 @@ module.exports = async (req, res) => {
     if (!query.trim()) {
       return json(res, 200, { tracks: [] });
     }
+   
+  // BitChord authentication (log-only mode)
+  try {
+    const bitchordAuth = await bitchordAuthPromise;
+    const authResult = await bitchordAuth.verifyRequest(req);
+
+    if (!authResult.ok) {
+      console.log("bitchord-auth would refuse:", authResult.error);
+    }
+  } catch (error) {
+    console.log("bitchord-auth verifier error:", error.message);
+  }
 
     try {
       const result = await searchArchive(query);
