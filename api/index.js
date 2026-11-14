@@ -86,12 +86,23 @@ async function searchArchive(query) {
     term.replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, "\\$&")
   );
 
+  
+  // Ask Archive.org for permitted license families first.
+  // Keep allowedLicense() as the final validation.
+  const licenseQuery = [
+    "licenseurl:http*creativecommons.org/licenses/by/*",
+    "licenseurl:http*creativecommons.org/licenses/by-sa/*",
+    "licenseurl:http*creativecommons.org/publicdomain/zero/*",
+    "licenseurl:http*creativecommons.org/publicdomain/mark/*"
+  ].join(" OR ");
+
   const searchQuery =
     "mediatype:audio AND (" +
     escaped.map(term =>
       `(title:${term} OR creator:${term} OR subject:${term})`
     ).join(" OR ") +
-    ")";
+    ") AND (" + licenseQuery + ")";
+
 
   const params = new URLSearchParams({
     q: searchQuery,
