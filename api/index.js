@@ -90,13 +90,13 @@ async function searchArchive(query) {
     "mediatype:audio AND (" +
     escaped.map(term =>
       `(title:${term} OR creator:${term} OR subject:${term})`
-    ).join(" AND ") +
+    ).join(" OR ") +
     ")";
 
   const params = new URLSearchParams({
     q: searchQuery,
     fl: "identifier,title,creator,licenseurl",
-    rows: "15",
+    rows: "50",
     page: "1",
     output: "json"
   });
