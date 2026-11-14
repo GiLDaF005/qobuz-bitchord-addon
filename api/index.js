@@ -97,11 +97,11 @@ async function searchArchive(query) {
   ].join(" OR ");
 
   const searchQuery =
-    "mediatype:audio AND (" +
-    escaped.map(term =>
-      `(title:${term} OR creator:${term} OR subject:${term})`
-    ).join(" OR ") +
-    ") AND (" + licenseQuery + ")";
+  "mediatype:audio AND (" +
+  escaped.map(term =>
+    `(title:${term} OR creator:${term} OR subject:${term})`
+  ).join(" OR ") +
+  ")";
 
 
   const params = new URLSearchParams({
