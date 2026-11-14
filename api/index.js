@@ -2,26 +2,18 @@
 const MANIFEST = {
   id: "dev.gildaffafa.qobuz",
   name: "Qobuz + Internet Archive",
-  version: "1.1.0",
+  version: "1.2.0",
   description: "Multi-source audio addon for BitChord",
   resources: ["search", "stream"],
   checkValidLossless: 0,
-  allowDownloads: 1,
-  settings: [
-    {
-      key: "quality",
-      type: "select",
-      label: "Audio quality",
-      default: "lossless",
-      options: [
-        { value: "lossless", label: "Lossless" },
-        { value: "high", label: "High" }
-      ]
-    }
-  ]
+  allowDownloads: 1
 };
 
 const ARCHIVE = "https://archive.org";
+const MAX_PAGES = 4;
+const ROWS = 50;
+const MAX_TRACKS = 20;
+const BATCH_SIZE = 10;
 
 function json(res, status, data) {
   res.statusCode = status;
@@ -54,19 +46,20 @@ function getFlacFile(files) {
 
 function getDuration(metadata) {
   const value = metadata.runtime || metadata.length;
-
   if (!value) return undefined;
 
   const number = Number(value);
   if (Number.isFinite(number)) return number;
 
   const parts = String(value).split(":").map(Number);
-
   if (parts.some(part => !Number.isFinite(part))) {
     return undefined;
   }
 
-  return parts.reduce((total, part) => total * 60 + part, 0);
+  return parts.reduce(
+    (total, part) => total * 60 + part,
+    0
+  );
 }
 
 async function getItem(identifier) {
@@ -74,41 +67,19 @@ async function getItem(identifier) {
     `${ARCHIVE}/metadata/${encodeURIComponent(identifier)}`
   );
 
-  if (!response.ok) return null;
+  if (!response.ok) {
+    throw new Error(`Metadata HTTP ${response.status}`);
+  }
 
   return response.json();
 }
 
-async function searchArchive(query) {
-  const terms = query.trim().split(/\s+/).slice(0, 6);
-
-  const escaped = terms.map(term =>
-    term.replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, "\\$&")
-  );
-
-  
-  // Ask Archive.org for permitted license families first.
-  // Keep allowedLicense() as the final validation.
-  const licenseQuery = [
-    "licenseurl:http*creativecommons.org/licenses/by/*",
-    "licenseurl:http*creativecommons.org/licenses/by-sa/*",
-    "licenseurl:http*creativecommons.org/publicdomain/zero/*",
-    "licenseurl:http*creativecommons.org/publicdomain/mark/*"
-  ].join(" OR ");
-
-  const searchQuery =
-  "mediatype:audio AND (" +
-  escaped.map(term =>
-    `(title:${term} OR creator:${term} OR subject:${term})`
-  ).join(" OR ") +
-  ")";
-
-
+async function searchPage(searchQuery, page) {
   const params = new URLSearchParams({
     q: searchQuery,
     fl: "identifier,title,creator,licenseurl",
-    rows: "50",
-    page: "1",
+    rows: String(ROWS),
+    page: String(page),
     output: "json"
   });
 
@@ -117,56 +88,141 @@ async function searchArchive(query) {
   );
 
   if (!response.ok) {
-    throw new Error("Internet Archive search failed");
+    throw new Error(`Search HTTP ${response.status}`);
   }
 
   const result = await response.json();
-  const docs = result.response?.docs || [];
 
-  const checked = await Promise.all(
-    docs.map(async doc => {
-      try {
-        const item = await getItem(doc.identifier);
-        if (!item || item.error) return null;
+  return {
+    docs: result.response?.docs || [],
+    total: Number(result.response?.numFound || 0)
+  };
+}
 
-        const metadata = item.metadata || {};
-        const license =
-          metadata.licenseurl || doc.licenseurl || "";
+async function searchArchive(query) {
+  const stats = {
+    pagesChecked: 0,
+    documentsFound: 0,
+    metadataErrors: 0,
+    rejectedLicense: 0,
+    missingFlac: 0,
+    accepted: 0
+  };
 
-        if (!allowedLicense(license)) return null;
+  const terms = query.trim().split(/\s+/).slice(0, 6);
 
-        const file = getFlacFile(item.files);
-        if (!file) return null;
-
-        const creator = metadata.creator || doc.creator || "";
-        const artist = Array.isArray(creator)
-          ? creator.join(", ")
-          : String(creator);
-
-        const track = {
-          id: doc.identifier,
-          title: metadata.title || doc.title || doc.identifier,
-          artist,
-          album: metadata.album || "",
-          artworkURL:
-            `${ARCHIVE}/services/img/${encodeURIComponent(doc.identifier)}`,
-          format: "flac",
-          audioQuality: "LOSSLESS"
-        };
-
-        const duration = getDuration(metadata);
-        if (duration !== undefined) {
-          track.duration = duration;
-        }
-
-        return track;
-      } catch {
-        return null;
-      }
-    })
+  const escaped = terms.map(term =>
+    term.replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, "\\$&")
   );
 
-  return checked.filter(Boolean);
+  const searchQuery =
+    "mediatype:audio AND (" +
+    escaped.map(term =>
+      `(title:${term} OR creator:${term} OR subject:${term})`
+    ).join(" OR ") +
+    ") AND licenseurl:http*by*";
+
+  const tracks = [];
+  const seen = new Set();
+
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const result = await searchPage(searchQuery, page);
+    stats.pagesChecked++;
+
+    const docs = result.docs;
+    stats.documentsFound += docs.length;
+
+    if (docs.length === 0) break;
+
+    for (
+      let start = 0;
+      start < docs.length;
+      start += BATCH_SIZE
+    ) {
+      const batch = docs.slice(start, start + BATCH_SIZE);
+
+      const checked = await Promise.all(
+        batch.map(async doc => {
+          try {
+            if (!doc.identifier || seen.has(doc.identifier)) {
+              return null;
+            }
+
+            seen.add(doc.identifier);
+
+            const item = await getItem(doc.identifier);
+            if (!item || item.error) {
+              stats.metadataErrors++;
+              return null;
+            }
+
+            const metadata = item.metadata || {};
+            const license =
+              metadata.licenseurl || doc.licenseurl || "";
+
+            if (!allowedLicense(license)) {
+              stats.rejectedLicense++;
+              return null;
+            }
+
+            const file = getFlacFile(item.files);
+
+            if (!file) {
+              stats.missingFlac++;
+              return null;
+            }
+
+            const creator = metadata.creator || doc.creator || "";
+            const artist = Array.isArray(creator)
+              ? creator.join(", ")
+              : String(creator);
+
+            const track = {
+              id: doc.identifier,
+              title:
+                metadata.title ||
+                doc.title ||
+                doc.identifier,
+              artist,
+              album: metadata.album || "",
+              artworkURL:
+                `${ARCHIVE}/services/img/${encodeURIComponent(doc.identifier)}`,
+              format: "flac",
+              audioQuality: "LOSSLESS"
+            };
+
+            const duration = getDuration(metadata);
+
+            if (duration !== undefined) {
+              track.duration = duration;
+            }
+
+            return track;
+          } catch {
+            stats.metadataErrors++;
+            return null;
+          }
+        })
+      );
+
+      for (const track of checked) {
+        if (track) tracks.push(track);
+      }
+
+      if (tracks.length >= MAX_TRACKS) break;
+    }
+
+    if (
+      tracks.length >= MAX_TRACKS ||
+      page * ROWS >= result.total
+    ) {
+      break;
+    }
+  }
+
+  stats.accepted = tracks.length;
+
+  return { tracks, stats };
 }
 
 async function resolveArchive(identifier) {
@@ -205,7 +261,9 @@ module.exports = async (req, res) => {
   }
 
   if (req.method !== "GET") {
-    return json(res, 405, { error: "Method not allowed" });
+    return json(res, 405, {
+      error: "Method not allowed"
+    });
   }
 
   const url = new URL(
@@ -231,8 +289,15 @@ module.exports = async (req, res) => {
     }
 
     try {
-      const tracks = await searchArchive(query);
-      return json(res, 200, { tracks });
+      const result = await searchArchive(query);
+
+      if (url.searchParams.get("debug") === "1") {
+        return json(res, 200, result);
+      }
+
+      return json(res, 200, {
+        tracks: result.tracks
+      });
     } catch (error) {
       return json(res, 502, {
         error: "Search service unavailable",
@@ -242,12 +307,22 @@ module.exports = async (req, res) => {
   }
 
   if (pathname.startsWith("/stream/")) {
-    const identifier = decodeURIComponent(
-      pathname.slice("/stream/".length)
-    );
+    let identifier;
+
+    try {
+      identifier = decodeURIComponent(
+        pathname.slice("/stream/".length)
+      );
+    } catch {
+      return json(res, 400, {
+        error: "Invalid track ID"
+      });
+    }
 
     if (!identifier) {
-      return json(res, 400, { error: "Missing track ID" });
+      return json(res, 400, {
+        error: "Missing track ID"
+      });
     }
 
     try {
@@ -260,7 +335,7 @@ module.exports = async (req, res) => {
       }
 
       return json(res, 200, stream);
-    } catch (error) {
+    } catch {
       return json(res, 502, {
         error: "Stream resolution failed"
       });
