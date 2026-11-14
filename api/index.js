@@ -5,6 +5,7 @@ const MANIFEST = {
   version: "1.2.0",
   description: "Multi-source audio addon for BitChord",
   resources: ["search", "stream"],
+  bitchordAuth: true,
   checkValidLossless: 0,
   allowDownloads: 1
 };
