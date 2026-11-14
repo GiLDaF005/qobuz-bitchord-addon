@@ -11,9 +11,9 @@ const MANIFEST = {
 };
 
 const ARCHIVE = "https://archive.org";
-const MAX_PAGES = 4;
-const ROWS = 50;
-const MAX_TRACKS = 20;
+const MAX_PAGES = 8;
+const ROWS = 100;
+const MAX_TRACKS = 50;
 const BATCH_SIZE = 10;
 
 // BitChord authentication verifier
@@ -124,10 +124,10 @@ async function searchArchive(query) {
     term.replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, "\\$&")
   );
 
-  const searchQuery =
+    const searchQuery =
     "mediatype:audio AND (" +
     escaped.map(term =>
-      `(title:${term} OR creator:${term} OR subject:${term})`
+      `(title:${term} OR creator:${term} OR subject:${term} OR description:${term} OR collection:${term})`
     ).join(" OR ") +
     ") AND licenseurl:http*by*";
 
