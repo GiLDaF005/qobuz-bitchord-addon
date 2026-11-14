@@ -11,10 +11,10 @@ const MANIFEST = {
 };
 
 const ARCHIVE = "https://archive.org";
-const MAX_PAGES = 8;
-const ROWS = 100;
-const MAX_TRACKS = 50;
-const BATCH_SIZE = 10;
+const MAX_PAGES = 2;
+const ROWS = 50;
+const MAX_TRACKS = 15;
+const BATCH_SIZE = 5;
 
 // BitChord authentication verifier
 const bitchordAuthPromise = import("../bitchord-addon-auth.mjs").then(
