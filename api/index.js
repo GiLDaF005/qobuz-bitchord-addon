@@ -536,7 +536,9 @@ const result = {
     }
 
     try {
-      const stream = await resolveArchive(identifier);
+      const stream = identifier.startsWith("commons:")
+  ? await resolveCommons(identifier.slice("commons:".length))
+  : await resolveArchive(identifier);
 
       if (!stream) {
         return json(res, 404, {
