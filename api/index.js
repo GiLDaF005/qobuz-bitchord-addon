@@ -43,7 +43,6 @@ function allowedLicense(value) {
   ].some(item => license.includes(item));
 }
 
-
 function getAudioFile(files) {
   if (!Array.isArray(files)) return null;
 
@@ -94,7 +93,6 @@ function getAudioFile(files) {
     return a.format === "flac" ? -1 : 1;
   })[0];
 }
-
 
 function getDuration(metadata) {
   const value = metadata.runtime || metadata.length;
@@ -217,12 +215,12 @@ async function searchArchive(query) {
               return null;
             }
 
-            const file = getFlacFile(item.files);
+            const audioFile = getAudioFile(item.files);
 
-            if (!file) {
-              stats.missingFlac++;
-              return null;
-            }
+if (!audioFile) {
+  stats.missingFlac++;
+  return null;
+}
 
             const creator = metadata.creator || doc.creator || "";
             const artist = Array.isArray(creator)
@@ -250,8 +248,8 @@ if (!terms.every(term =>
               album: metadata.album || "",
               artworkURL:
                 `${ARCHIVE}/services/img/${encodeURIComponent(doc.identifier)}`,
-              format: "flac",
-              audioQuality: "LOSSLESS"
+              format: audioFile.format,
+audioQuality: "LOSSLESS"
             };
 
             const duration = getDuration(metadata);
