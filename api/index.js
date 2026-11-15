@@ -147,11 +147,11 @@ async function searchArchive(query) {
   );
 
     const searchQuery =
-    "mediatype:audio AND (" +
-    escaped.map(term =>
-      `(title:${term} OR creator:${term} OR subject:${term} OR description:${term} OR collection:${term})`
-    ).join(" OR ") +
-    ") AND licenseurl:http*by*";
+  "mediatype:audio AND (" +
+  escaped.map(term =>
+    `(title:${term} OR creator:${term} OR subject:${term})`
+  ).join(" AND ") +
+  ") AND licenseurl:http*by*";
 
   const tracks = [];
   const seen = new Set();
