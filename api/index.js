@@ -46,11 +46,33 @@ function allowedLicense(value) {
 function getFlacFile(files) {
   if (!Array.isArray(files)) return null;
 
-  return files.find(file =>
+  const flacFiles = files.filter(file =>
     typeof file.name === "string" &&
     /\.flac$/i.test(file.name) &&
     Number(file.size || 0) > 0
-  ) || null;
+  );
+
+  if (flacFiles.length === 0) return null;
+
+  function score(file) {
+    const text = [
+      file.name,
+      file.source,
+      file.format
+    ].join(" ").toLowerCase();
+
+    if (/24.?bit.*(96|192)|((96|192).?khz).*24.?bit/.test(text)) {
+      return 3;
+    }
+
+    if (/16.?bit.*44.?1|44.?1.*16.?bit/.test(text)) {
+      return 2;
+    }
+
+    return 1;
+  }
+
+  return flacFiles.sort((a, b) => score(b) - score(a))[0];
 }
 
 function getDuration(metadata) {
