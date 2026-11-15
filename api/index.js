@@ -208,6 +208,17 @@ async function searchArchive(query) {
               ? creator.join(", ")
               : String(creator);
 
+const searchableText = [
+  metadata.title || doc.title || "",
+  artist
+].join(" ").toLowerCase();
+
+if (!terms.every(term =>
+  searchableText.includes(term.toLowerCase())
+)) {
+  return null;
+}
+
             const track = {
               id: doc.identifier,
               title:
