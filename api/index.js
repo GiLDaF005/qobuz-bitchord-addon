@@ -286,6 +286,7 @@ audioQuality: "LOSSLESS"
   return { tracks, stats };
 }
 
+
 async function resolveArchive(identifier) {
   const item = await getItem(identifier);
 
@@ -297,16 +298,18 @@ async function resolveArchive(identifier) {
     return null;
   }
 
-  const file = getFlacFile(item.files);
-  if (!file) return null;
+  const audioFile = getAudioFile(item.files);
+  if (!audioFile) return null;
+
+  const file = audioFile.file;
 
   return {
     url:
       `${ARCHIVE}/download/${encodeURIComponent(identifier)}/${encodeURIComponent(file.name)}`,
-    format: "flac",
-    quality: "Lossless FLAC",
-    codec: "flac",
-    container: "flac",
+    format: audioFile.format,
+    quality: audioFile.quality,
+    codec: audioFile.codec,
+    container: audioFile.container,
     manifest: "none",
     encrypted: false
   };
