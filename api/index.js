@@ -16,6 +16,162 @@ const ROWS = 50;
 const MAX_TRACKS = 15;
 const BATCH_SIZE = 5;
 
+const COMMONS_API = "https://commons.wikimedia.org/w/api.php";
+
+function cleanCommonsValue(value) {
+  return String(value || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function allowedCommonsLicense(metadata) {
+  const licenseUrl = String(
+    metadata?.LicenseUrl?.value || ""
+  ).toLowerCase();
+
+  return [
+    /creativecommons\.org\/licenses\/by\/[0-9.]+\/?$/,
+    /creativecommons\.org\/licenses\/by-sa\/[0-9.]+\/?$/,
+    /creativecommons\.org\/publicdomain\/zero\/[0-9.]+\/?$/,
+    /creativecommons\.org\/publicdomain\/mark\/[0-9.]+\/?$/
+  ].some(pattern => pattern.test(licenseUrl));
+}
+function commonsTrackFromPage(page) {
+  const info = page?.imageinfo?.[0];
+
+  if (!info || !/\.flac$/i.test(page.title || "")) {
+    return null;
+  }
+
+  if (String(info.mime || "").toLowerCase() !== "audio/flac") {
+    return null;
+  }
+
+  if (!info.url || Number(info.size || 0) <= 0) {
+    return null;
+  }
+
+  const metadata = info.extmetadata || {};
+
+  if (!allowedCommonsLicense(metadata)) {
+    return null;
+  }
+
+  const title =
+    cleanCommonsValue(metadata.ObjectName?.value) ||
+    page.title.replace(/^File:/i, "").replace(/\.flac$/i, "");
+
+  const artist =
+    cleanCommonsValue(metadata.Artist?.value) ||
+    "Unknown artist";
+
+  return {
+    id: "commons:" + page.title,
+    title,
+    artist,
+    album: "",
+    format: "flac",
+    audioQuality: "LOSSLESS"
+  };
+}
+
+async function searchCommons(query) {
+  const params = new URLSearchParams({
+    action: "query",
+    format: "json",
+    origin: "*",
+    generator: "search",
+    gsrsearch: `${query} filemime:audio/flac`,
+    gsrnamespace: "6",
+    gsrlimit: String(MAX_TRACKS),
+    prop: "imageinfo",
+    iiprop: "url|size|mime|extmetadata"
+  });
+
+  const response = await fetch(
+    `${COMMONS_API}?${params.toString()}`,
+    {
+      headers: {
+        "User-Agent": "BitChordFLACAddon/1.3"
+      }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Wikimedia Commons HTTP ${response.status}`
+    );
+  }
+
+  const result = await response.json();
+  const pages = Object.values(
+    result.query?.pages || {}
+  );
+
+  const tracks = pages
+    .map(commonsTrackFromPage)
+    .filter(Boolean);
+
+  return {
+    tracks: tracks.slice(0, MAX_TRACKS),
+    stats: {
+      documentsFound: pages.length,
+      accepted: tracks.length
+    }
+  };
+}
+
+async function resolveCommons(fileTitle) {
+  const params = new URLSearchParams({
+    action: "query",
+    format: "json",
+    titles: fileTitle,
+    prop: "imageinfo",
+    iiprop: "url|size|mime|extmetadata"
+  });
+
+  const response = await fetch(
+    `${COMMONS_API}?${params.toString()}`,
+    {
+      headers: {
+        "User-Agent": "BitChordFLACAddon/1.3"
+      }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Wikimedia Commons HTTP ${response.status}`
+    );
+  }
+
+  const result = await response.json();
+
+  const page = Object.values(
+    result.query?.pages || {}
+  )[0];
+
+  const track = commonsTrackFromPage(page);
+  const info = page?.imageinfo?.[0];
+
+  if (!track || !info?.url) return null;
+
+  return {
+    url: info.url,
+    format: "flac",
+    quality: "Lossless FLAC",
+    codec: "flac",
+    container: "flac",
+    manifest: "none",
+    encrypted: false
+  };
+}
+
 // BitChord authentication verifier
 const bitchordAuthPromise = import("../bitchord-addon-auth.mjs").then(
   ({ createBitChordAuth }) =>
@@ -207,7 +363,7 @@ if (!terms.every(term =>
               album: metadata.album || "",
               artworkURL:
                 `${ARCHIVE}/services/img/${encodeURIComponent(doc.identifier)}`,
-              format: audioFile.format,
+              format: "flac",
 audioQuality: "LOSSLESS"
             };
 
@@ -260,15 +416,15 @@ async function resolveArchive(identifier) {
   const audioFile = getFlacFile(item.files);
   if (!audioFile) return null;
 
-  const file = audioFile.file;
+  const file = audioFile;
 
-  return {
-    url:
-      `${ARCHIVE}/download/${encodeURIComponent(identifier)}/${encodeURIComponent(file.name)}`,
-    format: audioFile.format,
-    quality: audioFile.quality,
-    codec: audioFile.codec,
-    container: audioFile.container,
+return {
+  url:
+    `${ARCHIVE}/download/${encodeURIComponent(identifier)}/${encodeURIComponent(file.name)}`,
+  format: "flac",
+  quality: "Lossless FLAC",
+  codec: "flac",
+  container: "flac",
     manifest: "none",
     encrypted: false
   };
