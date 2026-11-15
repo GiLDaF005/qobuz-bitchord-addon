@@ -174,7 +174,7 @@ async function searchArchive(query) {
               return null;
             }
 
-            const audioFile = getAudioFile(item.files);
+            const audioFile = getFlacFile(item.files);
 
 if (!audioFile) {
   stats.missingFlac++;
@@ -257,7 +257,7 @@ async function resolveArchive(identifier) {
     return null;
   }
 
-  const audioFile = getAudioFile(item.files);
+  const audioFile = getFlacFile(item.files);
   if (!audioFile) return null;
 
   const file = audioFile.file;
