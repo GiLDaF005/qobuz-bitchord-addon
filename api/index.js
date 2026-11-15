@@ -1,9 +1,9 @@
 
 const MANIFEST = {
   id: "dev.gildaffafa.qobuz",
-  name: "Qobuz + Internet Archive",
-  version: "1.2.0",
-  description: "Multi-source audio addon for BitChord",
+  name: "Internet Archive + Wikimedia Commons",
+  version: "1.3.0",
+  description: "Free licensed FLAC audio from Internet Archive and Wikimedia Commons",
   resources: ["search", "stream"],
   bitchordAuth: true,
   checkValidLossless: 0,
@@ -43,55 +43,14 @@ function allowedLicense(value) {
   ].some(item => license.includes(item));
 }
 
-function getAudioFile(files) {
+function getFlacFile(files) {
   if (!Array.isArray(files)) return null;
 
-  const supportedFiles = files
-    .filter(file =>
-      typeof file.name === "string" &&
-      Number(file.size || 0) > 0
-    )
-    .map(file => {
-      const details = [
-        file.name,
-        file.source,
-        file.format
-      ].join(" ").toLowerCase();
-
-      if (/\.flac$/i.test(file.name)) {
-        return {
-          file,
-          format: "flac",
-          codec: "flac",
-          container: "flac",
-          quality: "Lossless FLAC"
-        };
-      }
-
-      if (
-        /\.(m4a|alac)$/i.test(file.name) &&
-        (/apple\s*lossless|\balac\b/i.test(details) ||
-          /\.alac$/i.test(file.name))
-      ) {
-        return {
-          file,
-          format: "alac",
-          codec: "alac",
-          container: "m4a",
-          quality: "Lossless ALAC"
-        };
-      }
-
-      return null;
-    })
-    .filter(Boolean);
-
-  if (supportedFiles.length === 0) return null;
-
-  return supportedFiles.sort((a, b) => {
-    if (a.format === b.format) return 0;
-    return a.format === "flac" ? -1 : 1;
-  })[0];
+  return files.find(file =>
+    typeof file.name === "string" &&
+    /\.flac$/i.test(file.name) &&
+    Number(file.size || 0) > 0
+  ) || null;
 }
 
 function getDuration(metadata) {
