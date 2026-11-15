@@ -43,37 +43,58 @@ function allowedLicense(value) {
   ].some(item => license.includes(item));
 }
 
-function getFlacFile(files) {
+
+function getAudioFile(files) {
   if (!Array.isArray(files)) return null;
 
-  const flacFiles = files.filter(file =>
-    typeof file.name === "string" &&
-    /\.flac$/i.test(file.name) &&
-    Number(file.size || 0) > 0
-  );
+  const supportedFiles = files
+    .filter(file =>
+      typeof file.name === "string" &&
+      Number(file.size || 0) > 0
+    )
+    .map(file => {
+      const details = [
+        file.name,
+        file.source,
+        file.format
+      ].join(" ").toLowerCase();
 
-  if (flacFiles.length === 0) return null;
+      if (/\.flac$/i.test(file.name)) {
+        return {
+          file,
+          format: "flac",
+          codec: "flac",
+          container: "flac",
+          quality: "Lossless FLAC"
+        };
+      }
 
-  function score(file) {
-    const text = [
-      file.name,
-      file.source,
-      file.format
-    ].join(" ").toLowerCase();
+      if (
+        /\.(m4a|alac)$/i.test(file.name) &&
+        (/apple\s*lossless|\balac\b/i.test(details) ||
+          /\.alac$/i.test(file.name))
+      ) {
+        return {
+          file,
+          format: "alac",
+          codec: "alac",
+          container: "m4a",
+          quality: "Lossless ALAC"
+        };
+      }
 
-    if (/24.?bit.*(96|192)|((96|192).?khz).*24.?bit/.test(text)) {
-      return 3;
-    }
+      return null;
+    })
+    .filter(Boolean);
 
-    if (/16.?bit.*44.?1|44.?1.*16.?bit/.test(text)) {
-      return 2;
-    }
+  if (supportedFiles.length === 0) return null;
 
-    return 1;
-  }
-
-  return flacFiles.sort((a, b) => score(b) - score(a))[0];
+  return supportedFiles.sort((a, b) => {
+    if (a.format === b.format) return 0;
+    return a.format === "flac" ? -1 : 1;
+  })[0];
 }
+
 
 function getDuration(metadata) {
   const value = metadata.runtime || metadata.length;
