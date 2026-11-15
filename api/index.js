@@ -480,7 +480,26 @@ module.exports = async (req, res) => {
   }
 
     try {
-      const result = await searchArchive(query);
+      const [archiveResult, commonsResult] = await Promise.allSettled([
+  searchArchive(query),
+  searchCommons(query)
+]);
+
+const archive = archiveResult.status === "fulfilled"
+  ? archiveResult.value
+  : { tracks: [], stats: { error: archiveResult.reason?.message || "Archive unavailable" } };
+
+const commons = commonsResult.status === "fulfilled"
+  ? commonsResult.value
+  : { tracks: [], stats: { error: commonsResult.reason?.message || "Commons unavailable" } };
+
+const result = {
+  tracks: [...archive.tracks, ...commons.tracks].slice(0, MAX_TRACKS * 2),
+  stats: {
+    internetArchive: archive.stats,
+    wikimediaCommons: commons.stats
+  }
+};
 
       if (url.searchParams.get("debug") === "1") {
         return json(res, 200, result);
